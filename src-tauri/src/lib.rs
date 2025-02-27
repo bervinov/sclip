@@ -1,13 +1,20 @@
+use tauri::{Manager};
+use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState};
+use tauri::menu::{Menu, MenuItem};
+use tauri::PhysicalPosition;
 use clipboard::{ClipboardContext, ClipboardProvider};
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use lazy_static::lazy_static;
 use std::{sync::Mutex, thread};
+use tauri::Listener;
 
+// Создает стейт
 lazy_static! {
     static ref ARRAY: Mutex<Vec<String>> = Mutex::new(vec![]);
     static ref CTX: Mutex<ClipboardContext> = Mutex::new(ClipboardProvider::new().unwrap());
 }
 
+// Чекер на command + C для добвление скопированного элемента в буфер
 fn buffer() {
     let device_state = DeviceState::new();
 
@@ -36,6 +43,7 @@ fn buffer() {
     }
 }
 
+// Вставка в буфер
 #[tauri::command]
 fn set_buffer(content: String) -> Result<(), String> {
     let mut ctx = CTX.lock().map_err(|e| e.to_string())?;
@@ -43,11 +51,13 @@ fn set_buffer(content: String) -> Result<(), String> {
     Ok(())
 }
 
+//  Получение данных из буфера
 #[tauri::command]
 fn get_buffer() -> Vec<String> {
     ARRAY.lock().unwrap().clone()
 }
 
+// Чистка буфера
 #[tauri::command]
 fn clean_buffer() -> Result<(), String> {
     ARRAY.lock().map_err(|e| e.to_string())?.clear();
@@ -67,6 +77,51 @@ pub fn run() {
             set_buffer,
             clean_buffer
         ])
+        .setup(|app| {
+                    #[cfg(target_os = "macos")]
+                    app.set_activation_policy(tauri::ActivationPolicy::Accessory);  // Скрытие из Dock
+        
+        
+                    let _ = TrayIconBuilder::new()
+                        .icon(app.default_window_icon().unwrap().clone())  
+                        .on_tray_icon_event(|tray, event| match event {
+                            TrayIconEvent::Click {
+                              button: MouseButton::Left,
+                              button_state: MouseButtonState::Up,
+                              ..
+                            } => {
+                              println!("left click pressed and released");
+                              // in this example, let's show and focus the main window when the tray is clicked
+                              let app = tray.app_handle();
+                              if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                              }
+                            }
+                            _ => {
+                              println!("unhandled event {event:?}");
+                            }
+                          })
+
+                        .build(app)?;
+        
+                    let window = app.get_webview_window("main").unwrap();
+                    window.hide().unwrap();
+        
+                    window.set_position(PhysicalPosition::new(1700, 0)).unwrap();
+                    window.set_resizable(false).unwrap();
+                    window.set_decorations(false).unwrap();
+                    window.set_always_on_top(true).unwrap();
+        
+                    let window_clone = window.clone();
+                    window.listen("tauri://blur", move |_| {
+                        println!("Window lost focus, hiding...");
+                        let _ = window_clone.hide();
+                    });
+        
+                    Ok(())
+                })
+
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -31,8 +31,11 @@ async function fetchBuffer() {
 
     buffer.forEach((item) => {
       if (item.trim() !== "") {
+        // Обрезаем слово, если оно больше 10 символов
+        const shortenedItem = item.length > 10 ? item.substring(0, 10) + "..." : item;
+
         const itemButton = document.createElement("button");
-        itemButton.textContent = item;
+        itemButton.textContent = shortenedItem;
         itemButton.classList.add("word-button");
         itemButton.addEventListener("click", () => sendToClipboard(item));
         bufferDisplayEl.appendChild(itemButton);
@@ -43,6 +46,7 @@ async function fetchBuffer() {
     bufferDisplayEl.textContent = "Error fetching buffer";
   }
 }
+
 
 window.addEventListener("DOMContentLoaded", () => {
   bufferDisplayEl = document.querySelector("#buffer-display");
